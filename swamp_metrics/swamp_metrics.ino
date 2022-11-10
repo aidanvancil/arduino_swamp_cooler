@@ -5,9 +5,18 @@ Comments: N/A
 Date:     11/09/22
 ---------------------------------------------------*/
 #include <LiquidCrystal.h>
+#include <DHT.h>
+#include <DHT_U.h>
 
 #define RDA 0x80
 #define TBE 0x20  
+
+// Temperature / Humidity
+float temp;
+#define DHTPIN 6      // DHT Pin
+#define DHTTYPE DHT11 // DHT Type
+
+DHT dht(DHTPIN, DHTTYPE);
 
 // Define Port B Register Pointers
 volatile unsigned char* port_b = (unsigned char*) 0x25;
@@ -35,19 +44,29 @@ void setup()
   // setup the UART
   //U0init(9600);
   Serial.begin(9600);
+  dht.begin();
   lcd.begin(16, 2);
-  // lcd.print("Temperature:");
-  lcd.clear();
-  lcd.print("Humidity:");
-  lcd.setCursor(0, 1);
-  lcd.print("Water Level: ");
+  lcd.clear();  
+  //lcd.print("Water Level: ");
 
-  //adc_init();s
+  //adc_init();
   //*ddr_b |= 0x80;
-
 }
+
 void loop()
 {
+  lcd.clear();
+  float humidity = dht.readHumidity();
+  float temp_celsius = dht.readTemperature();
+  float temp_farenheit = dht.readTemperature(true);
+  lcd.print("Temp   : ");
+  lcd.print(temp_farenheit);
+  lcd.print("\337F");
+  lcd.setCursor(0,1);
+  lcd.print("Humid %: ");
+  lcd.print(humidity);
+  delay(5000);
+
   // for (int pos = 0; pos < 13; pos++){
   //   lcd.scrollDisplayLeft();
   //   delay(10000);
