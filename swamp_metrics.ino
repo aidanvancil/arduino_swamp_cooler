@@ -55,6 +55,14 @@ volatile unsigned char *myUCSR0C = (unsigned char *)0x00C2;
 volatile unsigned int *myUBRR0 = (unsigned int *)0x00C4;
 volatile unsigned char *myUDR0 = (unsigned char *)0x00C6;
 
+// Define Timer Pointers
+volatile unsigned char *myTCCR1A  = 0x80;
+volatile unsigned char *myTCCR1B  = 0x81;
+volatile unsigned char *myTCCR1C  = 0x82;
+volatile unsigned char *myTIMSK1  = 0x6f;
+volatile unsigned char *myTIFR1   = 0x36;
+volatile unsigned int  *myTCNT1   = 0x84;
+
 // Define ADC Pointers
 volatile unsigned char *my_ADMUX = (unsigned char *)0x7C;
 volatile unsigned char *my_ADCSRB = (unsigned char *)0x7B;
@@ -70,6 +78,8 @@ volatile unsigned int *my_ADC_DATA = (unsigned int *)0x78;
 // Constants
 bool errMessage = false;
 bool canRun = false;
+unsigned int currentTicks;
+bool timer_running;
 //DS1307 clock;//define a object of DS1307 class
 
 void setup() {
@@ -77,7 +87,8 @@ void setup() {
 //  *ddr_a |= 0x01 << 0b00000011;  // Output Port A25 (Pin 3) [Blue] - Fan Running
 //  *ddr_a |= 0x01 << 0b00000101;  // Output Port A27 (Pin 5) [Red] - Error
 //  *ddr_a |= 0x01 << 0b00000111;  // Output Port A29 (Pin 7) [Green] - Fan Off Running
-
+  
+  setup_timer_regs(); // setup Timer for Normal Mode, TOV Enabled
   U0init(9600); // setup the UART
 
   // External Modules : DHT11
@@ -153,9 +164,42 @@ void loop() {
     *ddr_a |= 0x01 << 0b00000101;
     WRITE_LOW_PA(5);
   }
+  
+  // External Modules : Interrupts (Start Button)
+  if(start_button && started) {
+    currentTicks = 65535; // Disable system
+    if(timer_running) {
+      *myTCCR1B &= 0xF8;
+      timer_running = 0;
+      *portB &= 0xBF;
+    }
+  } else if (start_button && !started) {
+    currentTicks = ((1.0/double(start_button)/2.0f))/0.0000000625;
+    if(!timer_running) {
+      *myTCCR1B |= 0x01;
+      timer_running = 1;
+    }
+  }
 }
 
+void setup_timer_regs() {
+  // setup the timer control registers
+  *myTCCR1A= 0x00;
+  *myTCCR1B= 0X00;
+  *myTCCR1C= 0x00;
 
+  *myTIFR1 |= 0x01; // reset the TOV flag
+  *myTIMSK1 |= 0x01; // enable the TOV interrupt
+}
+
+ISR(TIMER1_OVF_vect){
+  *myTCCR1B &=0xF8;
+  *myTCNT1 =  (unsigned int) (65535 -  (unsigned long) (currentTicks));
+  *myTCCR1B |=   0x01;
+  if(currentTicks != 65535) {
+    *port_b^= 0x40;
+  }
+}
 
 
 
