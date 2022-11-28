@@ -79,7 +79,14 @@ bool errMessage = false;
 bool canRun = false;
 unsigned int currentTicks;
 bool timer_running;
-//DS1307 clock;//define a object of DS1307 class
+bool startButton = false;
+bool idleState = false;
+bool fan_running = false;
+unsigned long int TEMP_THRESHOLD = 72;
+unsigned long int WATER_THRESHOLD = 250;
+
+// Define RTC 
+// DS1307 clock;//define a object of DS1307 class
 
 void setup() {
 //  *ddr_a |= 0x01 << 0b00000001;  // Output Port A23 (Pin 1) [Yellow] - Disabled / Fan Off Running
@@ -125,7 +132,8 @@ void loop() {
   }
 
   // External Modules : DHT / LCD Clearing
-  if (!errMessage && ((millis() - delayStart) >= 5000)) {
+  if (!errMessage && ((millis() - delayStart) >= 5000) && (idleState || canRun)) {
+	fan_running = true;
     lcd.clear();
     delayStart = millis();
     float humidity = dht.readHumidity();
@@ -139,14 +147,42 @@ void loop() {
     lcd.print(humidity);
   }
 
-  // External Modules : Fan Motor / Running / Stopping
-  //if (canRun & startButton || canRun & idleState){
-    
-  //}
+  // External Modules : Current to Fan (off/on)
+  if (fan_running) {
+	//power fan here...
+  }
 
-  // External Modules : ADC
+  // External Modules : System Conditioning
+  if (startButton && !errMessage){
+	*ddr_a |= 0x01 << 0b00000001;
+	WRITE_LOW_PA(1);
+
+    if(isIdle){
+		*ddr_a |= 0x01 << 0b00000111;
+    	WRITE_HIGH_PA(7);
+		*ddr_a |= 0x01 << 0b00000011;
+		WRITE_LOW_PA(3);
+	} else {
+		*ddr_a |= 0x01 << 0b00000111;
+    	WRITE_LOW_PA(7);
+		*ddr_a |= 0x01 << 0b00000011;
+		WRITE_HIGH_PA(3);
+	}
+  } else if (!startButton & !errMessage) {
+	*ddr_a |= 0x01 << 0b00000011;
+	WRITE_LOW_PA(3);
+	*ddr_a |= 0x01 << 0b00000001;
+	WRITE_HIGH_PA(1);
+  }
+
+  if (reset && errMessage) {
+	isIdle = true;
+	errMessage = false;
+  }
+
+  // External Modules : ADC / Water Monitoring
   unsigned int adc_reading = adc_read(0);
-  if (adc_reading < 250) {
+  if (adc_reading < WATER_THRESHOLD) {
     canRun = false;
     errMessage = true;
     *ddr_a |= 0x01 << 0b00000101;
