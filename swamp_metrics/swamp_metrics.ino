@@ -8,8 +8,7 @@
 #include <LiquidCrystal.h>
 #include <DHT.h>
 #include <Wire.h>
-//#include "DS1307.h"
-#include <DHT_U.h>
+#include "RTClib.h"
 #include <Stepper.h>
 
 #define RDA 0x80
@@ -197,7 +196,7 @@ ISR(TIMER1_OVF_vect){
   *myTCNT1 =  (unsigned int) (65535 -  (unsigned long) (currentTicks));
   *myTCCR1B |=   0x01;
   if(currentTicks != 65535) {
-    *port_b^= 0x40;
+    *port_b^= 0x40;	// Whatever port this is for the light
   }
 }
 
