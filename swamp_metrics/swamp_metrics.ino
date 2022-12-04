@@ -85,8 +85,9 @@ bool fan_running = false;
 unsigned long int TEMP_THRESHOLD = 72;
 unsigned long int WATER_THRESHOLD = 250;
 
-// Define RTC 
-// DS1307 clock;//define a object of DS1307 class
+RTC_DS1307 rtc;//define a object of RTC_DS1307 class
+char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
+
 
 void setup() {
 //  *ddr_a |= 0x01 << 0b00000001;  // Output Port A23 (Pin 1) [Yellow] - Disabled / Fan Off Running
@@ -96,6 +97,10 @@ void setup() {
   
   setup_timer_regs(); // setup Timer for Normal Mode, TOV Enabled
   U0init(9600); // setup the UART
+
+  #ifndef ESP8266
+    while (!Serial); // wait for serial port to connect. Needed for native USB (might be unnecessary)
+  #endif
 
   // External Modules : DHT11
   dht.begin();
@@ -110,12 +115,19 @@ void setup() {
   // External Modules : ADC
   adc_init();
 
-  // External Modules : RTC
-//  clock.begin();
-//  clock.fillByYMD(2022,11,23);//Nov 23,2022
-//  clock.fillByHMS(9,01,00);//09:01 00
-//  clock.fillDayOfWeek(WED);//
-//  clock.setTime();//write time to the RTC chip
+  // Checks if RTC is connected properly 
+  if (! rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    Serial.flush();
+    abort();
+  }
+
+  if (! rtc.isrunning()) {
+    Serial.println("RTC is NOT running, let's set the time!");
+    // When time needs to be set on a new device, or after a power loss, the
+    // following line sets the RTC to the date & time this was compiled
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); //Sets RTC to correspond to the computer.
+  }
   
 }
 
@@ -147,6 +159,7 @@ void loop() {
     lcd.print(humidity);
   }
 
+/*
   // External Modules : Current to Fan (off/on)
   if (fan_running) {
 	//power fan here...
@@ -179,7 +192,7 @@ void loop() {
 	isIdle = true;
 	errMessage = false;
   }
-
+*/
   // External Modules : ADC / Water Monitoring
   unsigned int adc_reading = adc_read(0);
   if (adc_reading < WATER_THRESHOLD) {
@@ -200,6 +213,7 @@ void loop() {
     WRITE_LOW_PA(5);
   }
   
+  /*
   // External Modules : Interrupts (Start Button)
   if(start_button && started) {
     currentTicks = 65535; // Disable system
@@ -215,6 +229,7 @@ void loop() {
       timer_running = 1;
     }
   }
+  */
 }
 
 void setup_timer_regs() {
@@ -240,23 +255,24 @@ ISR(TIMER1_OVF_vect){
 
 // External Functions
 
-//void printTime(){
-//    clock.getTime();
-//    Serial.print(clock.hour, DEC);
-//    Serial.print(":");
-//    Serial.print(clock.minute, DEC);
-//    Serial.print(":");
-//    Serial.print(clock.second, DEC);
-//    Serial.print("  ");
-//    Serial.print(clock.month, DEC);
-//    Serial.print("/");
-//    Serial.print(clock.dayOfMonth, DEC);
-//    Serial.print("/");
-//    Serial.print(clock.year+2000, DEC);
-//    Serial.print(" ");
-//    Serial.print(clock.dayOfMonth);
-//    Serial.println(" ");
-//}
+void printTime(){
+DateTime now = rtc.now();
+
+    Serial.print(now.year(), DEC);
+    Serial.print('/');
+    Serial.print(now.month(), DEC);
+    Serial.print('/');
+    Serial.print(now.day(), DEC);
+    Serial.print(" (");
+    Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);
+    Serial.print(") ");
+    Serial.print(now.hour(), DEC);
+    Serial.print(':');
+    Serial.print(now.minute(), DEC);
+    Serial.print(':');
+    Serial.print(now.second(), DEC);
+    Serial.println();
+}
 
 void adc_init() {
   *my_ADCSRA |= 0b10000000;
