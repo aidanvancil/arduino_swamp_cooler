@@ -82,7 +82,7 @@ bool startButton = false;
 bool idleState = false;
 bool fan_running = false;
 bool enabled = false;
-unsigned long int TEMP_THRESHOLD = 77;
+unsigned long int TEMP_THRESHOLD = 72;
 unsigned long int WATER_THRESHOLD = 0; // was 250
 
 void setup() {
@@ -141,8 +141,12 @@ void loop() {
   if (!errMessage){
     if (button_1) {
       myStepper.step(50);
+      Serial.println("Going up... @");
+      printTime();
     } else if (button_2) {
       myStepper.step(-50);
+      Serial.println("Going up... @");
+      printTime();      
     }
   }
 
@@ -211,7 +215,7 @@ void loop() {
   }
 
   lightShow();
-  delay(2000);
+  delay(1000);
 }
 
 void lightShow() {
