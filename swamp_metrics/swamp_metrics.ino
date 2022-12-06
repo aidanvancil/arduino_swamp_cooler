@@ -86,9 +86,7 @@ unsigned long int TEMP_THRESHOLD = 72;
 unsigned long int WATER_THRESHOLD = 0; // was 250
 
 void setup() {
-   pinMode(23, OUTPUT);
-   pinMode(25, OUTPUT);
-   pinMode(27, OUTPUT);
+  *ddr_a |= 0b00101010;
 //  (Pin 4) [Yellow] - Disabled / Fan Off Running
 //  (Pin 5) [Blue] - Fan Running
 //  (Pin 6) [Red] - Error
@@ -121,20 +119,7 @@ void loop() {
     errMessage = false;
     enabled = false;
   }
-  // 23: OFF / ON
-  // 25: DIRECTION 1
-  // 27: DIRECTION 2
-  
-  // if (enabled && !errMessage) {
-  //   Serial.println("Fan running");
-  //   digitalWrite(23, HIGH);
-  //   digitalWrite(25, HIGH);
-  //   digitalWrite(27, LOW);
-  // } else if (enabled) {
-  //   digitalWrite(23, LOW);
-  //   Serial.println("Fan not running");
-  // }
- 
+
   // External Modules : Stepper Direction
   bool button_1 = *pin_d & 0b00000010;
   bool button_2 = *pin_d & 0b00000001;
@@ -194,20 +179,18 @@ void loop() {
       printTime();
       time_switch = true;
     }
-    digitalWrite(23, HIGH);
-    digitalWrite(25, HIGH);
-    digitalWrite(27, LOW);
+    *port_a |= 0b00001010;
   } else if (enabled && idleState) {
-    digitalWrite(23, LOW);
+    *port_a &= 0b11110101;
     if (time_switch){
       Serial.println("Fan On & Idle / Err @");
       printTime();
       time_switch = false;
     }
   } else {
+    *port_a &= 0b11110101;
     time_switch = false;
     Serial.println("System Disabled");
-    digitalWrite(23, LOW);
   }
 
   if (!enabled){
