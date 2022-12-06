@@ -80,8 +80,10 @@ bool timer_running;
 bool time_switch = false;
 bool startButton = false;
 bool idleState = false;
-bool fan_running = false;
 bool enabled = false;
+unsigned long int disabled_delay = 0;
+volatile unsigned long int isr_delay = 0;
+volatile unsigned long int start_button_count = 0;
 unsigned long int TEMP_THRESHOLD = 72;
 unsigned long int WATER_THRESHOLD = 0; // was 250
 
@@ -106,18 +108,22 @@ void setup() {
 
   // External Modules : ADC
   adc_init();
-
   // External Modules : RTC
 }
 
 void loop() {
   bool start_button = *pin_d & 0b00000100;
+  attachInterrupt(digitalPinToInterrupt(19), myISR, FALLING);
   if(start_button & !enabled){
     enabled = true;
     delayStart = millis() - 60000;
+    Serial.println("State Changes: ");
+    Serial.println(start_button_count);
   } else if (start_button){
     errMessage = false;
     enabled = false;
+    Serial.println("State Changes: ");
+    Serial.println(start_button_count);
   }
 
   // External Modules : Stepper Direction
@@ -190,7 +196,10 @@ void loop() {
   } else {
     *port_a &= 0b11110101;
     time_switch = false;
-    Serial.println("System Disabled");
+    if ((millis() - disabled_delay) >= 5000){
+      disabled_delay = millis();
+      Serial.println("System Disabled");
+    }
   }
 
   if (!enabled){
@@ -228,7 +237,15 @@ void lightShow() {
   }
 }
 
+
 // External Functions
+void myISR() {
+  if ((millis() - isr_delay) >= 1000) {
+    isr_delay = millis();
+    start_button_count++;
+  }
+}
+
 void printTime(){
   Serial.println("Time Here...");
 }
