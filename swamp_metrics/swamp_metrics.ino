@@ -1,3 +1,4 @@
+
 /*--------------------------------------------------
   Author:   Aidan Vancil + Andrew Gorum
   Project:  Creating A Embedded System (Swamp Cooler)
@@ -8,7 +9,8 @@
 #include <LiquidCrystal.h>
 #include <DHT.h>
 #include <Wire.h>
-#include "RTClib.h"
+//#include "RTClib.h"
+#include <DHT_U.h>
 #include <Stepper.h>
 
 #define RDA 0x80
@@ -47,20 +49,17 @@ volatile unsigned char *port_d = (unsigned char *)0x2B;
 volatile unsigned char *ddr_d = (unsigned char *)0x2A;
 volatile unsigned char *pin_d = (unsigned char *)0x29;
 
+// Define Port K Register Pointers
+volatile unsigned char *port_k = (unsigned char *)0x108;
+volatile unsigned char *ddr_k = (unsigned char *)0x107;
+volatile unsigned char *pin_k = (unsigned char *)0x106;
+
 // Define UART Pointers
 volatile unsigned char *myUCSR0A = (unsigned char *)0x00C0;
 volatile unsigned char *myUCSR0B = (unsigned char *)0x00C1;
 volatile unsigned char *myUCSR0C = (unsigned char *)0x00C2;
 volatile unsigned int *myUBRR0 = (unsigned int *)0x00C4;
 volatile unsigned char *myUDR0 = (unsigned char *)0x00C6;
-
-// Define Timer Pointers
-volatile unsigned char *myTCCR1A  = 0x80;
-volatile unsigned char *myTCCR1B  = 0x81;
-volatile unsigned char *myTCCR1C  = 0x82;
-volatile unsigned char *myTIMSK1  = 0x6f;
-volatile unsigned char *myTIFR1   = 0x36;
-volatile unsigned int  *myTCNT1   = 0x84;
 
 // Define ADC Pointers
 volatile unsigned char *my_ADMUX = (unsigned char *)0x7C;
@@ -73,35 +72,34 @@ volatile unsigned int *my_ADC_DATA = (unsigned int *)0x78;
 #define WRITE_LOW_PD(pin_num) *port_d &= ~(0x01 << pin_num);
 #define WRITE_HIGH_PA(pin_num) *port_a |= (0x01 << pin_num);
 #define WRITE_LOW_PA(pin_num) *port_a &= ~(0x01 << pin_num);
+#define WRITE_HIGH_PK(pin_num) *port_k |= (0x01 << pin_num);
+#define WRITE_LOW_PK(pin_num) *port_k &= ~(0x01 << pin_num);
 
 // Constants
 bool errMessage = false;
-bool canRun = false;
 unsigned int currentTicks;
 bool timer_running;
 bool startButton = false;
 bool idleState = false;
 bool fan_running = false;
+bool enabled = false;
 unsigned long int TEMP_THRESHOLD = 72;
 unsigned long int WATER_THRESHOLD = 250;
 
-RTC_DS1307 rtc;//define a object of RTC_DS1307 class
+//RTC_DS1307 rtc;//define a object of RTC_DS1307 class
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
-
 void setup() {
-//  *ddr_a |= 0x01 << 0b00000001;  // Output Port A23 (Pin 1) [Yellow] - Disabled / Fan Off Running
-//  *ddr_a |= 0x01 << 0b00000011;  // Output Port A25 (Pin 3) [Blue] - Fan Running
-//  *ddr_a |= 0x01 << 0b00000101;  // Output Port A27 (Pin 5) [Red] - Error
-//  *ddr_a |= 0x01 << 0b00000111;  // Output Port A29 (Pin 7) [Green] - Fan Off Running
-  
-  setup_timer_regs(); // setup Timer for Normal Mode, TOV Enabled
+   pinMode(23, OUTPUT);
+   pinMode(25, OUTPUT);
+   pinMode(27, OUTPUT);
+//  (Pin 4) [Yellow] - Disabled / Fan Off Running
+//  (Pin 5) [Blue] - Fan Running
+//  (Pin 6) [Red] - Error
+//  (Pin 7) [Green] - Fan Off Running
+
   U0init(9600); // setup the UART
-
-  #ifndef ESP8266
-    while (!Serial); // wait for serial port to connect. Needed for native USB (might be unnecessary)
-  #endif
-
+   
   // External Modules : DHT11
   dht.begin();
 
@@ -115,23 +113,37 @@ void setup() {
   // External Modules : ADC
   adc_init();
 
-  // Checks if RTC is connected properly 
-  if (! rtc.begin()) {
-    Serial.println("Couldn't find RTC");
-    Serial.flush();
-    abort();
-  }
-
-  if (! rtc.isrunning()) {
-    Serial.println("RTC is NOT running, let's set the time!");
-    // When time needs to be set on a new device, or after a power loss, the
-    // following line sets the RTC to the date & time this was compiled
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__))); //Sets RTC to correspond to the computer.
-  }
-  
+  // External Modules : RTC
+//  clock.begin();
+//  clock.fillByYMD(2022,11,23);//Nov 23,2022
+//  clock.fillByHMS(9,01,00);//09:01 00
+//  clock.fillDayOfWeek(WED);//
+//  clock.setTime();//write time to the RTC chip
+ 
 }
 
 void loop() {
+  bool start_button = *pin_d & 0b00000100;
+  Serial.println(errMessage);
+  if(start_button & !enabled){
+    enabled = true;
+  } else if (start_button){
+    errMessage = false;
+    enabled = false;
+  }
+  // 23: OFF / ON
+  // 25: DIRECTION 1
+  // 27: DIRECTION 2
+  if (enabled && !errMessage) {
+    Serial.println("Fan running");
+    digitalWrite(23, HIGH);
+    digitalWrite(25, HIGH);
+    digitalWrite(27, LOW);
+  } else if (enabled) {
+    digitalWrite(23, LOW);
+    Serial.println("Fan not running");
+  }
+ 
   // External Modules : Stepper Direction
   bool button_1 = *pin_d & 0b00000010;
   bool button_2 = *pin_d & 0b00000001;
@@ -144,8 +156,7 @@ void loop() {
   }
 
   // External Modules : DHT / LCD Clearing
-  if (!errMessage && ((millis() - delayStart) >= 5000) && (idleState || canRun)) {
-	fan_running = true;
+  if (!errMessage && ((millis() - delayStart) >= 5000)) {
     lcd.clear();
     delayStart = millis();
     float humidity = dht.readHumidity();
@@ -153,126 +164,82 @@ void loop() {
     float temp_farenheit = dht.readTemperature(true);
     lcd.print("Temp   : ");
     lcd.print(temp_farenheit);
+    if (temp_farenheit > TEMP_THRESHOLD) {
+      idleState = false;
+    } else {
+      idleState = true;
+    }
     lcd.print("\337F");
     lcd.setCursor(0, 1);
     lcd.print("Humid %: ");
     lcd.print(humidity);
   }
 
-/*
-  // External Modules : Current to Fan (off/on)
-  if (fan_running) {
-	//power fan here...
-  }
-
-  // External Modules : System Conditioning
-  if (startButton && !errMessage){
-	*ddr_a |= 0x01 << 0b00000001;
-	WRITE_LOW_PA(1);
-
-    if(isIdle){
-		*ddr_a |= 0x01 << 0b00000111;
-    	WRITE_HIGH_PA(7);
-		*ddr_a |= 0x01 << 0b00000011;
-		WRITE_LOW_PA(3);
-	} else {
-		*ddr_a |= 0x01 << 0b00000111;
-    	WRITE_LOW_PA(7);
-		*ddr_a |= 0x01 << 0b00000011;
-		WRITE_HIGH_PA(3);
-	}
-  } else if (!startButton & !errMessage) {
-	*ddr_a |= 0x01 << 0b00000011;
-	WRITE_LOW_PA(3);
-	*ddr_a |= 0x01 << 0b00000001;
-	WRITE_HIGH_PA(1);
-  }
-
-  if (reset && errMessage) {
-	isIdle = true;
-	errMessage = false;
-  }
-*/
-  // External Modules : ADC / Water Monitoring
+  // External Modules : ADC
   unsigned int adc_reading = adc_read(0);
-  if (adc_reading < WATER_THRESHOLD) {
-    canRun = false;
+  if (enabled && !idleState && adc_reading < WATER_THRESHOLD){
     errMessage = true;
-    *ddr_a |= 0x01 << 0b00000101;
-    WRITE_HIGH_PA(5);
+  }
+  if ((adc_reading <= WATER_THRESHOLD) && idleState && !errMessage){
+    idleState = false;
+    errMessage = true;
     //printTime();
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Water Level");
     lcd.setCursor(0, 1);
     lcd.print("Too Low...");
+  }
+ 
+  lightShow();
+  delay(2000);
+}
+
+void lightShow() {
+ 
+  if (errMessage) {
+    WRITE_HIGH_PK(6);
   } else {
-    canRun = true;
-    errMessage = false;
-    *ddr_a |= 0x01 << 0b00000101;
-    WRITE_LOW_PA(5);
+    WRITE_LOW_PK(6);
   }
-  
-  /*
-  // External Modules : Interrupts (Start Button)
-  if(start_button && started) {
-    currentTicks = 65535; // Disable system
-    if(timer_running) {
-      *myTCCR1B &= 0xF8;
-      timer_running = 0;
-      *portB &= 0xBF;
-    }
-  } else if (start_button && !started) {
-    currentTicks = ((1.0/double(start_button)/2.0f))/0.0000000625;
-    if(!timer_running) {
-      *myTCCR1B |= 0x01;
-      timer_running = 1;
-    }
+ 
+  if (idleState) {
+    WRITE_HIGH_PK(7);
+  } else {
+    WRITE_LOW_PK(7);
   }
-  */
-}
 
-void setup_timer_regs() {
-  // setup the timer control registers
-  *myTCCR1A= 0x00;
-  *myTCCR1B= 0X00;
-  *myTCCR1C= 0x00;
+  if ((!idleState && !errMessage )&& !enabled) {
+    WRITE_HIGH_PK(4);
+  } else {
+    WRITE_LOW_PK(4);
+  }
 
-  *myTIFR1 |= 0x01; // reset the TOV flag
-  *myTIMSK1 |= 0x01; // enable the TOV interrupt
-}
-
-ISR(TIMER1_OVF_vect){
-  *myTCCR1B &=0xF8;
-  *myTCNT1 =  (unsigned int) (65535 -  (unsigned long) (currentTicks));
-  *myTCCR1B |=   0x01;
-  if(currentTicks != 65535) {
-    *port_b^= 0x40;	// Whatever port this is for the light
+  if (!idleState && enabled){
+    WRITE_HIGH_PK(5);
+  } else {
+    WRITE_LOW_PK(5);
   }
 }
 
-
-
-// External Functions
-
-void printTime(){
-DateTime now = rtc.now();
-
-    Serial.print(now.year(), DEC);
-    Serial.print('/');
-    Serial.print(now.month(), DEC);
-    Serial.print('/');
-    Serial.print(now.day(), DEC);
-    Serial.print(" (");
-    Serial.print(daysOfTheWeek[now.dayOfTheWeek()]);
-    Serial.print(") ");
-    Serial.print(now.hour(), DEC);
-    Serial.print(':');
-    Serial.print(now.minute(), DEC);
-    Serial.print(':');
-    Serial.print(now.second(), DEC);
-    Serial.println();
-}
+//// External Functions
+//void printTime(){
+//    clock.getTime();
+//    Serial.println(clock.hour, DEC);
+//    Serial.println(":");
+//    Serial.println(clock.minute, DEC);
+//    Serial.println(":");
+//    Serial.println(clock.second, DEC);
+//    Serial.println("  ");
+//    Serial.println(clock.month, DEC);
+//    Serial.println("/");
+//    Serial.println(clock.dayOfMonth, DEC);
+//    Serial.println("/");
+//    Serial.println(clock.year+2000, DEC);
+//    Serial.println(" ");
+//    Serial.println(clock.dayOfMonth);
+//    Serial.println(" ");
+//}
 
 void adc_init() {
   *my_ADCSRA |= 0b10000000;
