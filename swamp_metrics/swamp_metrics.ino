@@ -1,4 +1,3 @@
-
 /*--------------------------------------------------
   Author:   Aidan Vancil + Andrew Gorum
   Project:  Creating A Embedded System (Swamp Cooler)
@@ -9,7 +8,7 @@
 #include <LiquidCrystal.h>
 #include <DHT.h>
 #include <Wire.h>
-//#include "RTClib.h"
+#include "RTClib.h"
 #include <DHT_U.h>
 #include <Stepper.h>
 
@@ -79,14 +78,15 @@ volatile unsigned int *my_ADC_DATA = (unsigned int *)0x78;
 bool errMessage = false;
 unsigned int currentTicks;
 bool timer_running;
+bool time_switch = false;
 bool startButton = false;
 bool idleState = false;
 bool fan_running = false;
 bool enabled = false;
 unsigned long int TEMP_THRESHOLD = 72;
-unsigned long int WATER_THRESHOLD = 250;
+unsigned long int WATER_THRESHOLD = 0; // was 250
 
-//RTC_DS1307 rtc;//define a object of RTC_DS1307 class
+RTC_DS1307 rtc;//define a object of RTC_DS1307 class
 char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 void setup() {
@@ -114,17 +114,21 @@ void setup() {
   adc_init();
 
   // External Modules : RTC
-//  clock.begin();
-//  clock.fillByYMD(2022,11,23);//Nov 23,2022
-//  clock.fillByHMS(9,01,00);//09:01 00
-//  clock.fillDayOfWeek(WED);//
-//  clock.setTime();//write time to the RTC chip
- 
+  //rtc.adjust(DateTime(2022, 12, 6, 10, 4, 20));  
+  if (! rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    Serial.flush();
+    abort();
+  }
+
+  if (! rtc.isrunning()) {
+    Serial.println("RTC is NOT running, let's set the time!");
+    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  }
 }
 
 void loop() {
   bool start_button = *pin_d & 0b00000100;
-  Serial.println(errMessage);
   if(start_button & !enabled){
     enabled = true;
   } else if (start_button){
@@ -134,15 +138,16 @@ void loop() {
   // 23: OFF / ON
   // 25: DIRECTION 1
   // 27: DIRECTION 2
-  if (enabled && !errMessage) {
-    Serial.println("Fan running");
-    digitalWrite(23, HIGH);
-    digitalWrite(25, HIGH);
-    digitalWrite(27, LOW);
-  } else if (enabled) {
-    digitalWrite(23, LOW);
-    Serial.println("Fan not running");
-  }
+  
+  // if (enabled && !errMessage) {
+  //   Serial.println("Fan running");
+  //   digitalWrite(23, HIGH);
+  //   digitalWrite(25, HIGH);
+  //   digitalWrite(27, LOW);
+  // } else if (enabled) {
+  //   digitalWrite(23, LOW);
+  //   Serial.println("Fan not running");
+  // }
  
   // External Modules : Stepper Direction
   bool button_1 = *pin_d & 0b00000010;
@@ -156,7 +161,10 @@ void loop() {
   }
 
   // External Modules : DHT / LCD Clearing
-  if (!errMessage && ((millis() - delayStart) >= 5000)) {
+  if (!errMessage && ((millis() - delayStart) >= 60000) && !enabled) {
+    lcd.clear();
+    delayStart = millis();
+  } else if (!errMessage && ((millis() - delayStart) >= 60000) && enabled) {
     lcd.clear();
     delayStart = millis();
     float humidity = dht.readHumidity();
@@ -180,17 +188,40 @@ void loop() {
   if (enabled && !idleState && adc_reading < WATER_THRESHOLD){
     errMessage = true;
   }
-  if ((adc_reading <= WATER_THRESHOLD) && idleState && !errMessage){
+  if ((adc_reading <= WATER_THRESHOLD) && enabled){
     idleState = false;
     errMessage = true;
-    //printTime();
     lcd.clear();
     lcd.setCursor(0, 0);
     lcd.print("Water Level");
     lcd.setCursor(0, 1);
     lcd.print("Too Low...");
   }
- 
+
+  if (enabled && !errMessage) {
+    if (!time_switch){
+      Serial.println("Fan On And Running @");
+      printTime();
+      time_switch = true;
+    }
+    digitalWrite(23, HIGH);
+    digitalWrite(25, HIGH);
+    digitalWrite(27, LOW);
+  } else if (enabled) {
+    digitalWrite(23, LOW);
+    if (time_switch){
+      Serial.print("Fan On & Idle / Err @");
+      printTime();
+      time_switch = false;
+    }
+  } else {
+    time_switch = false;
+    Serial.println("System Disabled");
+  }
+  if (!enabled){
+    lcd.clear();
+  }
+
   lightShow();
   delay(2000);
 }
@@ -203,43 +234,43 @@ void lightShow() {
     WRITE_LOW_PK(6);
   }
  
-  if (idleState) {
+  if (idleState & !errMessage) {
     WRITE_HIGH_PK(7);
   } else {
     WRITE_LOW_PK(7);
   }
 
-  if ((!idleState && !errMessage )&& !enabled) {
+  if (!enabled) {
     WRITE_HIGH_PK(4);
   } else {
     WRITE_LOW_PK(4);
   }
 
-  if (!idleState && enabled){
+  if (!idleState && enabled && !errMessage){
     WRITE_HIGH_PK(5);
   } else {
     WRITE_LOW_PK(5);
   }
 }
 
-//// External Functions
-//void printTime(){
-//    clock.getTime();
-//    Serial.println(clock.hour, DEC);
-//    Serial.println(":");
-//    Serial.println(clock.minute, DEC);
-//    Serial.println(":");
-//    Serial.println(clock.second, DEC);
-//    Serial.println("  ");
-//    Serial.println(clock.month, DEC);
-//    Serial.println("/");
-//    Serial.println(clock.dayOfMonth, DEC);
-//    Serial.println("/");
-//    Serial.println(clock.year+2000, DEC);
-//    Serial.println(" ");
-//    Serial.println(clock.dayOfMonth);
-//    Serial.println(" ");
-//}
+// External Functions
+void printTime(){
+  DateTime now = rtc.now();
+  Serial.println(now.year(), DEC);
+  Serial.println('/');
+  Serial.println(now.month(), DEC);
+  Serial.println('/');
+  Serial.println(now.day(), DEC);
+  Serial.println(" (");
+  Serial.println(daysOfTheWeek[now.dayOfTheWeek()]);
+  Serial.println(") ");
+  Serial.println(now.hour(), DEC);
+  Serial.println(':');
+  Serial.println(now.minute(), DEC);
+  Serial.println(':');
+  Serial.println(now.second(), DEC);
+  Serial.println();
+}
 
 void adc_init() {
   *my_ADCSRA |= 0b10000000;
