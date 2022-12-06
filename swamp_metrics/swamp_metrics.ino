@@ -8,7 +8,6 @@
 #include <LiquidCrystal.h>
 #include <DHT.h>
 #include <Wire.h>
-#include "RTClib.h"
 #include <DHT_U.h>
 #include <Stepper.h>
 
@@ -31,7 +30,7 @@ Stepper myStepper(STEPS_PER_REV, 2, 4, 3, 5);
 LiquidCrystal lcd(7, 8, 9, 10, 11, 12);
 
 // Initialize a non-blocking delay
-unsigned long int delayStart = millis();
+unsigned long int delayStart = 0;
 
 // Define Port A Register Pointers
 volatile unsigned char *port_a = (unsigned char *)0x22;
@@ -83,11 +82,8 @@ bool startButton = false;
 bool idleState = false;
 bool fan_running = false;
 bool enabled = false;
-unsigned long int TEMP_THRESHOLD = 72;
+unsigned long int TEMP_THRESHOLD = 77;
 unsigned long int WATER_THRESHOLD = 0; // was 250
-
-RTC_DS1307 rtc;//define a object of RTC_DS1307 class
-char daysOfTheWeek[7][12] = {"Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"};
 
 void setup() {
    pinMode(23, OUTPUT);
@@ -114,23 +110,13 @@ void setup() {
   adc_init();
 
   // External Modules : RTC
-  //rtc.adjust(DateTime(2022, 12, 6, 10, 4, 20));  
-  if (! rtc.begin()) {
-    Serial.println("Couldn't find RTC");
-    Serial.flush();
-    abort();
-  }
-
-  if (! rtc.isrunning()) {
-    Serial.println("RTC is NOT running, let's set the time!");
-    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-  }
 }
 
 void loop() {
   bool start_button = *pin_d & 0b00000100;
   if(start_button & !enabled){
     enabled = true;
+    delayStart = millis() - 60000;
   } else if (start_button){
     errMessage = false;
     enabled = false;
@@ -198,7 +184,7 @@ void loop() {
     lcd.print("Too Low...");
   }
 
-  if (enabled && !errMessage) {
+  if (enabled && !errMessage && !idleState) {
     if (!time_switch){
       Serial.println("Fan On And Running @");
       printTime();
@@ -207,17 +193,19 @@ void loop() {
     digitalWrite(23, HIGH);
     digitalWrite(25, HIGH);
     digitalWrite(27, LOW);
-  } else if (enabled) {
+  } else if (enabled && idleState) {
     digitalWrite(23, LOW);
     if (time_switch){
-      Serial.print("Fan On & Idle / Err @");
+      Serial.println("Fan On & Idle / Err @");
       printTime();
       time_switch = false;
     }
   } else {
     time_switch = false;
     Serial.println("System Disabled");
+    digitalWrite(23, LOW);
   }
+
   if (!enabled){
     lcd.clear();
   }
@@ -234,7 +222,7 @@ void lightShow() {
     WRITE_LOW_PK(6);
   }
  
-  if (idleState & !errMessage) {
+  if (idleState & !errMessage & enabled) {
     WRITE_HIGH_PK(7);
   } else {
     WRITE_LOW_PK(7);
@@ -255,21 +243,7 @@ void lightShow() {
 
 // External Functions
 void printTime(){
-  DateTime now = rtc.now();
-  Serial.println(now.year(), DEC);
-  Serial.println('/');
-  Serial.println(now.month(), DEC);
-  Serial.println('/');
-  Serial.println(now.day(), DEC);
-  Serial.println(" (");
-  Serial.println(daysOfTheWeek[now.dayOfTheWeek()]);
-  Serial.println(") ");
-  Serial.println(now.hour(), DEC);
-  Serial.println(':');
-  Serial.println(now.minute(), DEC);
-  Serial.println(':');
-  Serial.println(now.second(), DEC);
-  Serial.println();
+  Serial.println("Time Here...");
 }
 
 void adc_init() {
