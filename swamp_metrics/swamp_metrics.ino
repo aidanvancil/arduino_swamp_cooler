@@ -1,3 +1,4 @@
+
 /*--------------------------------------------------
   Author:   Aidan Vancil + Andrew Gorum
   Project:  Creating A Embedded System (Swamp Cooler)
@@ -9,6 +10,8 @@
 #include <DHT.h>
 #include <Wire.h>
 #include <DHT_U.h>
+#include "Arduino.h"
+#include "uRTCLib.h"
 #include <Stepper.h>
 
 #define RDA 0x80
@@ -21,6 +24,9 @@ float temp;
 
 // Initialize the DHT11 sensor on DHTPIN 6
 DHT dht(DHTPIN, DHTTYPE);
+
+// Initialize the RTC
+uRTCLib rtc(0x68);
 
 // Initialize the stepper library on pins 2 through 5:
 const float STEPS_PER_REV = 32;
@@ -81,6 +87,7 @@ bool time_switch = false;
 bool startButton = false;
 bool idleState = false;
 bool enabled = false;
+bool one_time = false;
 unsigned long int disabled_delay = 0;
 volatile unsigned long int isr_delay = 0;
 volatile unsigned long int start_button_count = 0;
@@ -108,7 +115,11 @@ void setup() {
 
   // External Modules : ADC
   adc_init();
+  
   // External Modules : RTC
+  URTCLIB_WIRE.begin();
+  rtc.set(0, 40, 11, 3, 7, 12, 22);
+  //  RTCLib::set(byte second, byte minute, byte hour, byte dayOfWeek, byte dayOfMonth, byte month, byte year)
 }
 
 void loop() {
@@ -127,8 +138,8 @@ void loop() {
   }
 
   // External Modules : Stepper Direction
-  bool button_1 = *pin_d & 0b00000010;
-  bool button_2 = *pin_d & 0b00000001;
+  bool button_1 = *pin_d & 0b00001000;
+  bool button_2 = *pin_d & 0b00010000;
   if (!errMessage){
     if (button_1) {
       myStepper.step(50);
@@ -136,7 +147,7 @@ void loop() {
       printTime();
     } else if (button_2) {
       myStepper.step(-50);
-      Serial.println("Going up... @");
+      Serial.println("Going down... @");
       printTime();      
     }
   }
@@ -181,24 +192,27 @@ void loop() {
 
   if (enabled && !errMessage && !idleState) {
     if (!time_switch){
-      Serial.println("Fan On And Running @");
+      Serial.print("Fan On And Running @ ");
       printTime();
       time_switch = true;
     }
+    one_time = true;
     *port_a |= 0b00001010;
   } else if (enabled && idleState) {
     *port_a &= 0b11110101;
     if (time_switch){
-      Serial.println("Fan On & Idle / Err @");
+      Serial.print("Fan On & Idle / Err @ ");
       printTime();
       time_switch = false;
     }
+    one_time = true;
   } else {
     *port_a &= 0b11110101;
     time_switch = false;
-    if ((millis() - disabled_delay) >= 5000){
-      disabled_delay = millis();
-      Serial.println("System Disabled");
+    if (one_time){
+      Serial.print("System Disabled @ ");
+      printTime();
+      one_time = false;
     }
   }
 
@@ -247,7 +261,20 @@ void myISR() {
 }
 
 void printTime(){
-  Serial.println("Time Here...");
+  rtc.refresh();
+  Serial.print(rtc.year());
+  Serial.print('/');
+  Serial.print(rtc.month());
+  Serial.print('/');
+  Serial.print(rtc.day());
+
+  Serial.print(' ');
+
+  Serial.print(rtc.hour());
+  Serial.print(':');
+  Serial.print(rtc.minute());
+  Serial.print(':');
+  Serial.print(rtc.second());
 }
 
 void adc_init() {
