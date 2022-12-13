@@ -128,13 +128,13 @@ void loop() {
   if(start_button & !enabled){
     enabled = true;
     delayStart = millis() - 60000;
-    Serial.println("State Changes: ");
-    Serial.println(start_button_count);
+    U0putstr("State Changes: ");
+    print_int(start_button_count);
   } else if (start_button){
     errMessage = false;
     enabled = false;
-    Serial.println("State Changes: ");
-    Serial.println(start_button_count);
+    U0putstr("State Changes: ");
+    print_int(start_button_count);
   }
 
   // External Modules : Stepper Direction
@@ -143,11 +143,13 @@ void loop() {
   if (!errMessage){
     if (button_1) {
       myStepper.step(50);
-      Serial.println("Going up... @");
+      U0putstr("\n");
+      U0putstr("Going up... @ ");
       printTime();
     } else if (button_2) {
       myStepper.step(-50);
-      Serial.println("Going down... @");
+      U0putstr("\n");
+      U0putstr("Going down... @ ");
       printTime();      
     }
   }
@@ -192,7 +194,7 @@ void loop() {
 
   if (enabled && !errMessage && !idleState) {
     if (!time_switch){
-      Serial.print("Fan On And Running @ ");
+      U0putstr("Fan On And Running @ ");
       printTime();
       time_switch = true;
     }
@@ -201,7 +203,7 @@ void loop() {
   } else if (enabled && idleState) {
     *port_a &= 0b11110101;
     if (time_switch){
-      Serial.print("Fan On & Idle / Err @ ");
+      U0putstr("Fan On & Idle / Err @ ");
       printTime();
       time_switch = false;
     }
@@ -210,7 +212,7 @@ void loop() {
     *port_a &= 0b11110101;
     time_switch = false;
     if (one_time){
-      Serial.print("System Disabled @ ");
+      U0putstr("System Disabled @ ");
       printTime();
       one_time = false;
     }
@@ -262,19 +264,19 @@ void myISR() {
 
 void printTime(){
   rtc.refresh();
-  Serial.print(rtc.year());
-  Serial.print('/');
-  Serial.print(rtc.month());
-  Serial.print('/');
-  Serial.print(rtc.day());
+  print_int(rtc.year());
+  U0putchar('/');
+  print_int(rtc.month());
+  U0putchar('/');
+  print_int(rtc.day());
 
-  Serial.print(' ');
+  U0putchar(' ');
 
-  Serial.print(rtc.hour());
-  Serial.print(':');
-  Serial.print(rtc.minute());
-  Serial.print(':');
-  Serial.print(rtc.second());
+  print_int(rtc.hour());
+  U0putchar(':');
+  print_int(rtc.minute());
+  U0putchar(':');
+  print_int(rtc.second());
 }
 
 void adc_init() {
@@ -320,7 +322,6 @@ void print_int(unsigned int out_num) {
     out_num = out_num % 10;
   }
   U0putchar(out_num + '0');
-  U0putchar('\n');
 }
 
 void U0init(int U0baud) {
@@ -342,4 +343,10 @@ unsigned char U0getchar() {
 void U0putchar(unsigned char U0pdata) {
   while ((*myUCSR0A & TBE) == 0);
   *myUDR0 = U0pdata;
+}
+
+void U0putstr(unsigned char string[]){
+  for (int i = 0; string[i] != '\0'; i++){
+    U0putchar(string[i]);
+  }
 }
