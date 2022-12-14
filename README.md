@@ -2,7 +2,7 @@
 # Swamp Cooler
 
 Team Members:
-Aidan Vancil
+Aidan Vancil ,
 Andrew Gorum
 
 These files are for the Arduino Mega 2560 Embedded Microcontroller. 
