@@ -1,6 +1,10 @@
 
 # Swamp Cooler
 
+Team Members:
+Aidan Vancil
+Andrew Gorum
+
 These files are for the Arduino Mega 2560 Embedded Microcontroller. 
 Build these files to compile a embedded swamp cooler. (CPE_301_1001)
 
